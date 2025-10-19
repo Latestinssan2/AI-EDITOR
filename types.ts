@@ -32,6 +32,16 @@ export interface ImageFilters {
   vignette: number; // 0-100, default 0
 }
 
+export interface AppliedText {
+    id: string;
+    content: string;
+    x: number; // in pixels on canvas
+    y: number; // in pixels on canvas
+    fontSize: number;
+    color: string;
+    fontFamily: string;
+}
+
 // Pexels API types
 export interface PexelsPhoto {
   id: number;
@@ -93,21 +103,21 @@ export interface MediaFile {
   name: string;
   url: string; // This will be a blob URL for session use
   type: MediaFileType;
-  file: File;
+  file?: File; // Make file optional as it won't exist for generated audio
   duration?: number;
 }
 
 // Video Editor Timeline types
 export interface TimelineClip {
   id:string;
-  source: PexelsVideo | MediaFile;
+  source: PexelsVideo | MediaFile | { isPlaceholder: true; placeholderText: string };
   originalDuration: number;
   duration: number;
   startOffset: number;
-  // New properties for offline editing
-  volume?: number; // 0-1, default 1
-  speed?: number; // e.g., 0.5, 1, 2. default 1
+  volume?: number;
+  speed?: number;
   filters?: ImageFilters;
+  isPlaceholder?: boolean;
 }
 
 // New type for video overlays (stickers, text, effects)
@@ -127,6 +137,10 @@ export interface Overlay {
     fontSize?: number; // In pixels, relative to a 1080p canvas
     color?: string; // hex color
     fontFamily?: string;
+    fontWeight?: 'normal' | 'bold';
+    textAlign?: 'left' | 'center' | 'right';
+    backgroundColor?: string;
+    textShadow?: boolean;
 }
 
 // Slideshow Maker Template type
@@ -145,6 +159,7 @@ export interface VideoProjectState {
     overlays: Overlay[];
     zoomLevel: number;
     playheadPosition: number;
+    duration: number;
 }
 
 export interface SlideshowProjectState {
@@ -157,6 +172,7 @@ export interface ImageEditorProjectState {
     editedImageUrl: string | null;
     prompt: string;
     filters?: ImageFilters; // For device-mode edits
+    appliedText?: AppliedText[];
 }
 
 export interface Project {

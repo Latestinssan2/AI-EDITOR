@@ -1,11 +1,11 @@
-
-const CACHE_NAME = 'gemini-genesis-v8-cache-v1';
+const CACHE_NAME = 'gemini-genesis-v8-cache-v2'; // Incremented cache version
 const urlsToCache = [
   '/',
   '/index.html',
   '/offline.html',
-  // Note: In a real app, you'd list all your assets here (JS, CSS, images).
-  // For this project, we're keeping it simple as assets are loaded from CDNs or are part of the JS bundle.
+  // Add main app icons to cache for PWA installation
+  '/logo192.png',
+  '/logo512.png'
 ];
 
 self.addEventListener('install', event => {
@@ -18,23 +18,6 @@ self.addEventListener('install', event => {
   );
 });
 
-self.addEventListener('fetch', event => {
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request).catch(() => {
-          // If the request is for navigation, show the offline page.
-          if (event.request.mode === 'navigate') {
-            return caches.match('/offline.html');
-          }
-        });
-      })
-  );
-});
-
 self.addEventListener('activate', event => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
@@ -42,10 +25,64 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheWhitelist.indexOf(cacheName) === -1) {
+            console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
+    })
+  );
+});
+
+// Stale-while-revalidate strategy function
+async function staleWhileRevalidate(request) {
+    const cache = await caches.open(CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+    
+    const fetchPromise = fetch(request).then(networkResponse => {
+        // Check if we received a valid response
+        if (networkResponse && networkResponse.status === 200) {
+            cache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+    }).catch(err => {
+        // Network failed, we can ignore this if we have a cached response
+        console.warn(`Fetch failed for ${request.url}; using cache if available.`, err);
+    });
+
+    return cachedResponse || fetchPromise;
+}
+
+self.addEventListener('fetch', event => {
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Use network-first for navigation requests to get the latest app version.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .catch(() => caches.match(request)) // Fallback to cache
+        .catch(() => caches.match('/offline.html')) // Fallback to offline page
+    );
+    return;
+  }
+
+  // For CDN assets and Pexels images, use Stale-While-Revalidate for performance.
+  const isCdnAsset = url.hostname === 'aistudiocdn.com' || 
+                     url.hostname.includes('pexels.com') || 
+                     url.hostname.includes('googleapis.com') || 
+                     url.hostname.includes('gstatic.com') ||
+                     url.hostname.includes('cdnjs.cloudflare.com');
+
+  if (isCdnAsset) {
+    event.respondWith(staleWhileRevalidate(request));
+    return;
+  }
+
+  // For other requests (like local assets), use Cache-first.
+  event.respondWith(
+    caches.match(request).then(response => {
+      return response || fetch(request);
     })
   );
 });

@@ -9,7 +9,7 @@ interface HeaderProps {
 
 const MobileNavItem: React.FC<{ icon: string; isActive: boolean; onClick: () => void }> = ({ icon, isActive, onClick }) => (
     <button onClick={onClick} className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${isActive ? 'text-purple-400' : 'text-gray-400 hover:text-white'}`}>
-        <i className={`fas ${icon} text-2xl`}></i>
+        <i className={`fas ${icon} text-xl`}></i>
     </button>
 );
 
@@ -54,13 +54,14 @@ const Header: React.FC<HeaderProps> = ({ activeView, setActiveView }) => {
             </div>
 
             {/* Mobile Bottom Nav */}
-            <nav className="flex md:hidden w-full items-center justify-around">
+            <nav className="grid grid-cols-7 md:hidden w-full items-center justify-around">
                 <MobileNavItem icon="fa-video" isActive={activeView === 'video'} onClick={() => setActiveView('video')} />
                 <MobileNavItem icon="fa-wand-magic-sparkles" isActive={activeView === 'photo'} onClick={() => setActiveView('photo')} />
                 <MobileNavItem icon="fa-images" isActive={activeView === 'slideshow'} onClick={() => setActiveView('slideshow')} />
                 <MobileNavItem icon="fa-robot" isActive={activeView === 'aiforge'} onClick={() => setActiveView('aiforge')} />
                 <MobileNavItem icon="fa-layer-group" isActive={activeView === 'templates'} onClick={() => setActiveView('templates')} />
                 <MobileNavItem icon="fa-folder" isActive={activeView === 'files'} onClick={() => setActiveView('files')} />
+                <MobileNavItem icon="fa-cog" isActive={activeView === 'settings'} onClick={() => setActiveView('settings')} />
             </nav>
         </header>
     );

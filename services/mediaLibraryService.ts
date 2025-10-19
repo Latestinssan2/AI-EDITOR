@@ -1,4 +1,5 @@
 import { MediaFile, MediaFileType } from '../types';
+import { v4 as uuidv4 } from 'uuid';
 
 type MediaLibraryListener = (files: MediaFile[]) => void;
 
@@ -53,7 +54,7 @@ class MediaLibraryService {
             }
 
             return {
-                id: `${file.name}-${file.lastModified}`,
+                id: `${file.name}-${file.lastModified}-${uuidv4()}`,
                 name: file.name,
                 url: url,
                 type: type,
@@ -65,6 +66,15 @@ class MediaLibraryService {
         const newMediaFiles = await Promise.all(newMediaFilesPromises);
         this.mediaFiles = [...this.mediaFiles, ...newMediaFiles];
         this.emit();
+        return newMediaFiles;
+    }
+
+    async addFileFromBase64(base64Data: string, name: string, mimeType: string): Promise<MediaFile> {
+        const fetchRes = await fetch(`data:${mimeType};base64,${base64Data}`);
+        const blob = await fetchRes.blob();
+        const file = new File([blob], name, { type: mimeType });
+        const [newMediaFile] = await this.addFiles([file]);
+        return newMediaFile;
     }
 }
 

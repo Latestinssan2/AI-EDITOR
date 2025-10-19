@@ -1,9 +1,10 @@
 import React, { useRef } from 'react';
-import { TimelineClip, MediaFile, PexelsVideo } from '../../../types';
+import { TimelineClip } from '../../../types';
 
 interface TimelineClipItemProps {
     clip: TimelineClip;
     onUpdate: (updatedClip: TimelineClip) => void;
+    onReplace: (clipId: string) => void;
     zoomLevel: number;
     isAudio: boolean;
     isSelected: boolean;
@@ -12,9 +13,24 @@ interface TimelineClipItemProps {
 
 const BASE_PIXELS_PER_SECOND = 20;
 
-const TimelineClipItem: React.FC<TimelineClipItemProps> = ({ clip, onUpdate, zoomLevel, isAudio, isSelected, onClick }) => {
+const TimelineClipItem: React.FC<TimelineClipItemProps> = ({ clip, onUpdate, onReplace, zoomLevel, isAudio, isSelected, onClick }) => {
     const clipRef = useRef<HTMLDivElement>(null);
-    const source = clip.source;
+    
+    if (clip.isPlaceholder) {
+        const placeholderWidth = clip.duration * BASE_PIXELS_PER_SECOND * zoomLevel;
+        return (
+            <div
+                style={{ width: `${placeholderWidth}px` }}
+                onClick={() => onReplace(clip.id)}
+                className={`relative bg-gray-700 border-2 border-dashed border-gray-500 rounded-md flex-shrink-0 h-16 flex flex-col items-center justify-center p-2 cursor-pointer hover:border-purple-400 hover:bg-gray-600 transition-colors ${isSelected ? 'ring-2 ring-yellow-400' : ''}`}
+            >
+                <i className="fas fa-photo-video text-gray-400 mb-1"></i>
+                <p className="text-white text-xs text-center select-none">{(clip.source as any).placeholderText}</p>
+            </div>
+        )
+    }
+
+    const source = clip.source as any; // Cast because we know it's not a placeholder here
     const clipWidth = clip.duration * BASE_PIXELS_PER_SECOND * zoomLevel;
 
     const handleDragStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, handle: 'left' | 'right') => {

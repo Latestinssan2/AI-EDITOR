@@ -1,6 +1,7 @@
 import React from 'react';
 import { toastService } from '../../services/toastService';
 import { useAppContext } from '../../contexts/AppContext';
+import { templateService } from '../../services/templateService';
 
 const templates = [
     { name: "Successfully Mission Failed", description: "Sharp contrast, Glitch effect, Clown sticker.", icon: "🤡", themeColor: "bg-red-500" },
@@ -29,14 +30,20 @@ const TemplatesDashboard: React.FC = () => {
     const { setActiveView } = (window as any)._appContextForFiles || {};
 
     const handleTemplateSelect = (templateName: string) => {
-        // In a real implementation, this would load a complex project state.
-        // For now, we'll show a toast and prepare the ground work.
-        toastService.info(`Loading template: "${templateName}". Feature coming soon!`);
-
-        // Example of how it would work:
-        // const templateProject = templateService.getTemplate(templateName);
-        // setProjectToLoad(templateProject);
-        // if (setActiveView) setActiveView('video');
+        try {
+            const templateProject = templateService.getTemplate(templateName);
+            setProjectToLoad(templateProject);
+            if (setActiveView) {
+                setActiveView('video');
+                toastService.success(`Template "${templateName}" loaded!`);
+            } else {
+                toastService.error("Could not switch to video editor.");
+            }
+        } catch (error) {
+            if (error instanceof Error) {
+                toastService.error(error.message);
+            }
+        }
     };
 
     return (
