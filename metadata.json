@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Genesis Editor V8",
+  "description": "A world-class, futuristic video and photo editor application built with React, TypeScript, and the Gemini API. Provides a sleek, modern, and highly resilient user experience with offline capabilities.",
+  "requestFramePermissions": []
+}
