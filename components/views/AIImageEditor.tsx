@@ -1,298 +1,349 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { fileToBase64 } from '../../utils/fileUtils';
-import { editImageWithPrompt, removeImageBackground } from '../../services/geminiService';
-import { toastService } from '../../services/toastService';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+import {
+  MediaFile, PexelsPhoto, ImageProjectState, Project, Overlay
+} from '../../types';
 import { useAppContext } from '../../contexts/AppContext';
-import Spinner from '../common/Spinner';
-import { pexelsService } from '../../services/pexelsService';
-import { PexelsPhoto, MediaFile, ImageEditorProjectState, ImageFilters, AppliedText } from '../../types';
-import { mediaLibraryService } from '../../services/mediaLibraryService';
-import { errorHandler } from '../../services/errorHandler';
 import { projectService } from '../../services/projectService';
+import { toastService } from '../../services/toastService';
+import { fileToBase64 } from '../../utils/fileUtils';
+import { editImageWithPrompt, removeImageBackground, autoAdjustImage } from '../../services/geminiService';
 import { v4 as uuidv4 } from 'uuid';
+import EditorTopBar from '../editor/EditorTopBar';
+import EditorToolbar from '../editor/EditorToolbar';
+import MediaPanel from '../editor/panels/MediaPanel';
+import AdjustPanel from '../editor/panels/AdjustPanel';
+import AIPanel from '../editor/panels/AIPanel';
+import TextPanel from '../editor/panels/TextPanel';
+import StickersPanel from '../editor/panels/StickersPanel';
+import TemplatesPanel from '../editor/panels/TemplatesPanel';
+import CropPanel from '../editor/panels/CropPanel';
+import TransformableOverlay from '../editor/TransformableOverlay';
+import CropOverlay from '../editor/CropOverlay';
+import ExportSuccessModal from '../editor/panels/ExportSuccessModal';
+import { exportService } from '../../services/exportService';
+import Spinner from '../common/Spinner';
 
-type EditorTool = 'media' | 'ai' | 'adjust' | 'crop' | 'resize' | 'stickers' | 'text';
-type AppliedSticker = { id: string; type: 'emoji' | 'image'; content: string; x: number; y: number; size: number };
-
-const defaultFilters: ImageFilters = {
-  brightness: 100, contrast: 100, saturation: 100,
-  hue: 0, sharpness: 0, temperature: 0,
-  blur: 0, vignette: 0
-};
-
-const STICKERS = [ '😍', '😂', '🔥', '👍', '❤️', '✨', '🎉', '🍕', '🚀', '💯' ];
-const FONT_FACES = [ 'Inter', 'Arial', 'Verdana', 'Georgia', 'Orbitron', 'Rajdhani', 'Audiowide' ];
-
-const CROP_RATIOS = [
-    { name: 'Free', value: 0 }, { name: '1:1', value: 1/1 }, { name: '4:3', value: 4/3 },
-    { name: '16:9', value: 16/9 }, { name: '9:16', value: 9/16 },
-];
-
-const MediaPanel: React.FC<{ onSelect: (file: File) => void }> = ({ onSelect }) => {
-    const [myMediaFiles, setMyMediaFiles] = useState<MediaFile[]>([]);
-    useEffect(() => {
-        const sub = mediaLibraryService.subscribe(setMyMediaFiles);
-        return () => sub.unsubscribe();
-    }, []);
-
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            const uploadedFile = e.target.files[0];
-            await mediaLibraryService.addFiles([uploadedFile]);
-            onSelect(uploadedFile); // Also select the newly uploaded file
-        }
-    };
-
-    return (
-        <div className="h-full flex flex-col p-2">
-            <label className="w-full text-center py-3 px-4 mb-3 bg-purple-600 text-white font-semibold rounded-lg cursor-pointer hover:bg-purple-700 block">
-                <i className="fas fa-upload mr-2"></i> Upload Image
-                <input type="file" accept="image/*" className="hidden" onChange={handleUpload} />
-            </label>
-            <h3 className="text-sm font-semibold text-gray-400 mb-2 px-2">My Media</h3>
-            <div className="flex-grow overflow-y-auto pr-2">
-                <div className="grid grid-cols-2 gap-2">
-                    {myMediaFiles.filter(f => f.type === 'image').map(media => (
-                        <div key={media.id} onClick={() => media.file && onSelect(media.file)} className="relative aspect-square bg-black rounded-lg overflow-hidden group cursor-pointer">
-                            <img src={media.url} alt={media.name} className="w-full h-full object-cover" />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
-const StickersPanel: React.FC<{onSelectEmoji: (emoji: string) => void, onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void}> = ({onSelectEmoji, onUpload}) => (
-    <div className="p-4">
-        <label className="w-full text-center py-2 px-4 mb-3 bg-gray-700 text-white font-semibold rounded-lg cursor-pointer hover:bg-gray-600 block text-sm">
-            <i className="fas fa-image mr-2"></i> Upload Custom Sticker
-            <input type="file" accept="image/png, image/gif, image/webp" className="hidden" onChange={onUpload} />
-        </label>
-        <div className="grid grid-cols-5 gap-2">
-            {STICKERS.map(emoji => (
-                <button key={emoji} onClick={() => onSelectEmoji(emoji)} className="aspect-square bg-gray-700 text-2xl rounded-lg hover:bg-purple-600">
-                    {emoji}
-                </button>
-            ))}
-        </div>
-    </div>
-);
-
-const TextPanel: React.FC<{ onAddText: () => void; selectedText: AppliedText | null; onUpdateText: (id: string, newProps: Partial<AppliedText>) => void }> = ({ onAddText, selectedText, onUpdateText }) => {
-    if (selectedText) {
-        return (
-             <div className="p-4 space-y-4">
-                <textarea
-                    value={selectedText.content}
-                    onChange={(e) => onUpdateText(selectedText.id, { content: e.target.value })}
-                    rows={2}
-                    className="w-full bg-gray-700 rounded-md p-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-                <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="text-xs text-gray-400">Font</label>
-                        <select value={selectedText.fontFamily} onChange={e => onUpdateText(selectedText.id, { fontFamily: e.target.value })} className="w-full bg-gray-700 rounded-md p-2 text-sm">
-                            {FONT_FACES.map(f => <option key={f} value={f}>{f}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-xs text-gray-400">Size</label>
-                        <input type="number" value={selectedText.fontSize} onChange={e => onUpdateText(selectedText.id, { fontSize: +e.target.value })} className="w-full bg-gray-700 rounded-md p-2 text-sm"/>
-                    </div>
-                </div>
-                <div>
-                     <label className="text-xs text-gray-400">Color</label>
-                     <input type="color" value={selectedText.color} onChange={e => onUpdateText(selectedText.id, { color: e.target.value })} className="w-full h-10 bg-gray-700 rounded-md p-1"/>
-                </div>
-            </div>
-        )
-    }
-    return (
-        <div className="p-4">
-            <button onClick={onAddText} className="w-full py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700">
-                <i className="fas fa-plus mr-2"></i> Add Text
-            </button>
-        </div>
-    )
+const defaultFilters = {
+    brightness: 1, contrast: 1, saturate: 1, 'hue-rotate': 0, blur: 0, sepia: 0, grayscale: 0
 };
 
 const AIImageEditor: React.FC = () => {
-    const { aiMode, projectToLoad, setProjectToLoad } = useAppContext();
-    const [originalImage, setOriginalImage] = useState<File | null>(null);
-    const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
-    const [editedImageUrl, setEditedImageUrl] = useState<string | null>(null);
-    const [prompt, setPrompt] = useState<string>('');
-    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const { projectToLoad, setProjectToLoad, aiMode } = useAppContext();
+    const [project, setProject] = useState<Project | null>(null);
+    const [projectName, setProjectName] = useState('Untitled Image');
+    const [media, setMedia] = useState<MediaFile | PexelsPhoto | null>(null);
+    const [filters, setFilters] = useState<Record<string, number>>(defaultFilters);
+    const [overlays, setOverlays] = useState<Overlay[]>([]);
+    const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
+    const [activeTool, setActiveTool] = useState('media');
     
-    const [filters, setFilters] = useState<ImageFilters>(defaultFilters);
-    const [activeTool, setActiveTool] = useState<EditorTool>('media');
-    const [appliedStickers, setAppliedStickers] = useState<AppliedSticker[]>([]);
-    const [appliedText, setAppliedText] = useState<AppliedText[]>([]);
-    const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
-    const [stickerImageCache, setStickerImageCache] = useState<Record<string, HTMLImageElement>>({});
-    const [rotation, setRotation] = useState(0);
-    const [resize, setResize] = useState({ width: 0, height: 0 });
+    const [history, setHistory] = useState<Partial<ImageProjectState>[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+
+    const [isCropping, setIsCropping] = useState(false);
+    const [cropRect, setCropRect] = useState({ x: 0, y: 0, width: 100, height: 100 });
+    const [cropAspectRatio, setCropAspectRatio] = useState('free');
+
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportedMedia, setExportedMedia] = useState<{ url: string; file: File; type: 'image' | 'video' } | null>(null);
 
     const imageRef = useRef<HTMLImageElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const finalCanvasRef = useRef<HTMLCanvasElement>(null);
+    const canvasContainerRef = useRef<HTMLDivElement>(null);
+    
+    const addToHistory = useCallback((newState: Partial<ImageProjectState>) => {
+        const newHistory = history.slice(0, historyIndex + 1);
+        newHistory.push(newState);
+        setHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+    }, [history, historyIndex]);
 
-    const redrawCanvas = useCallback(async (isFinalExport = false) => {
-        const canvas = isFinalExport ? finalCanvasRef.current : canvasRef.current;
-        const image = imageRef.current;
-        if (!canvas || !image || !image.src || image.naturalWidth === 0) return;
+    const updateState = (updates: Partial<ImageProjectState>) => {
+        if (updates.filters) setFilters(updates.filters);
+        if (updates.overlays) setOverlays(updates.overlays);
+        if (updates.media) setMedia(updates.media);
+    };
 
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-
-        ctx.filter = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturation}%) hue-rotate(${filters.hue}deg) blur(${filters.blur}px)`;
-        ctx.drawImage(image, 0, 0);
-        ctx.filter = 'none';
-
-        // Draw stickers
-        appliedStickers.forEach(sticker => {
-            if (sticker.type === 'emoji') {
-                ctx.font = `${sticker.size}px sans-serif`;
-                ctx.fillText(sticker.content, sticker.x, sticker.y + sticker.size);
-            }
-        });
-        
-        // Draw text
-        appliedText.forEach(text => {
-            ctx.font = `${text.fontSize}px ${text.fontFamily}`;
-            ctx.fillStyle = text.color;
-            ctx.fillText(text.content, text.x, text.y);
-        });
-
-        if (!isFinalExport) {
-            setEditedImageUrl(canvas.toDataURL());
+    const handleUndo = () => {
+        if (historyIndex > 0) {
+            const prevState = history[historyIndex - 1];
+            updateState(prevState);
+            setHistoryIndex(historyIndex - 1);
         }
-    }, [originalImageUrl, filters, rotation, appliedStickers, appliedText, stickerImageCache]);
-    
-    const resetAllEdits = (keepImage: boolean = false) => { /* ... existing implementation ... */ };
-    useEffect(() => { /* ... existing implementation ... */ }, [redrawCanvas]);
-    useEffect(() => { /* project loading logic */ }, [projectToLoad, setProjectToLoad]);
-
-    const handleFileSelect = (file: File) => {
-        resetAllEdits();
-        setOriginalImage(file);
-        const url = URL.createObjectURL(file);
-        setOriginalImageUrl(url);
-        
-        const tempImg = new Image();
-        tempImg.src = url;
-        tempImg.onload = () => {
-             imageRef.current = tempImg;
-             setResize({ width: tempImg.naturalWidth, height: tempImg.naturalHeight });
-             redrawCanvas();
-             setActiveTool('adjust');
-        };
-    };
-    
-    const handleAITool = async (tool: 'background' | 'focus') => { /* ... existing implementation ... */ };
-    const applyVintageFilter = () => { /* ... existing implementation ... */ };
-    const handleDownload = () => { /* ... existing download logic ... */ };
-    const handleSaveProject = async () => { /* ... existing save logic ... */ };
-    const applyCropAndResize = (type: 'crop' | 'resize' | 'rotate', value?: any) => { /* ... existing code ... */ };
-    const addSticker = (sticker: Omit<AppliedSticker, 'id'>) => { setAppliedStickers(prev => [...prev, { ...sticker, id: uuidv4() }]); }
-    const handleAddEmoji = (emoji: string) => { if (!canvasRef.current) return; addSticker({ type: 'emoji', content: emoji, x: canvasRef.current.width/2 - 50, y: canvasRef.current.height/2-50, size: 100 }); }
-    const handleCustomStickerUpload = (e: React.ChangeEvent<HTMLInputElement>) => { /* ... existing implementation ... */ }
-
-    const handleAddText = () => {
-        if (!canvasRef.current) return;
-        const newText: AppliedText = {
-            id: uuidv4(),
-            content: 'Your Text Here',
-            x: canvasRef.current.width / 2 - 100,
-            y: canvasRef.current.height / 2,
-            fontSize: 48,
-            color: '#FFFFFF',
-            fontFamily: 'Inter',
-        };
-        setAppliedText(prev => [...prev, newText]);
-        setSelectedTextId(newText.id);
     };
 
-    const handleUpdateText = (id: string, newProps: Partial<AppliedText>) => {
-        setAppliedText(prev => prev.map(t => t.id === id ? { ...t, ...newProps } : t));
+    const handleRedo = () => {
+        if (historyIndex < history.length - 1) {
+            const nextState = history[historyIndex + 1];
+            updateState(nextState);
+            setHistoryIndex(historyIndex + 1);
+        }
     };
     
-    const selectedText = appliedText.find(t => t.id === selectedTextId) || null;
-
     useEffect(() => {
-        redrawCanvas();
-    }, [filters, appliedText, appliedStickers]);
+        if (projectToLoad && projectToLoad.type === 'photo') {
+            const state = projectToLoad.state as ImageProjectState;
+            setProject(projectToLoad);
+            setProjectName(projectToLoad.name);
+            setMedia(state.media);
+            setFilters(state.filters || defaultFilters);
+            setOverlays(state.overlays || []);
+            const initialState = { media: state.media, filters: state.filters || defaultFilters, overlays: state.overlays || [] };
+            setHistory([initialState]);
+            setHistoryIndex(0);
+            setProjectToLoad(null);
+        }
+    }, [projectToLoad, setProjectToLoad]);
+    
+    const handleSelectMedia = (selectedMedia: MediaFile | PexelsPhoto) => {
+        setMedia(selectedMedia);
+        setFilters(defaultFilters);
+        setOverlays([]);
+        const initialState = { media: selectedMedia, filters: defaultFilters, overlays: [] };
+        setHistory([initialState]);
+        setHistoryIndex(0);
+        setActiveTool('adjust');
+    };
+
+    const handleFilterChange = (filter: string, value: number) => {
+        setFilters(prev => ({...prev, [filter]: value}));
+    };
+
+    const handleFilterChangeEnd = () => {
+        addToHistory({ filters });
+    };
+
+    const handleSaveProject = () => {
+        if (!media) {
+            toastService.error("Please add an image to save the project.");
+            return;
+        }
+        const state: ImageProjectState = { media, filters, overlays };
+        const projectData: Omit<Project, 'id' | 'createdAt'> & { id?: string } = {
+            id: project?.id, name: projectName, type: 'photo', state
+        };
+        const savedProject = projectService.saveProject(projectData);
+        setProject(savedProject);
+        toastService.success(`Project "${projectName}" saved!`);
+    };
+
+    const handleExport = async () => {
+        if (!media) {
+            toastService.error("Please add an image to export.");
+            return;
+        }
+        setIsExporting(true);
+        try {
+            const projectToExport: Project = {
+                id: project?.id || `proj_${Date.now()}`,
+                name: projectName,
+                type: 'photo',
+                state: { media, filters, overlays },
+                createdAt: project?.createdAt || new Date().toISOString()
+            };
+            const result = await exportService.exportProject(projectToExport, () => {});
+            setExportedMedia(result);
+        } catch (e) {
+            if (e instanceof Error) toastService.error(e.message);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+    
+    const handleAIAction = async (prompt: string) => {
+        if (aiMode === 'Device') { toastService.error("Cloud AI mode needed."); return; }
+        if (!media) { toastService.error("Please add an image first."); return; }
+
+        try {
+            const file = 'file' in media ? media.file : await (await fetch(media.src.original)).blob();
+            const base64Image = await fileToBase64(new File([file], "image"));
+            const mimeType = file.type || 'image/jpeg';
+            
+            const newBase64Image = await editImageWithPrompt(base64Image, mimeType, prompt);
+            
+            const newFile = new File([await(await fetch(`data:image/png;base64,${newBase64Image}`)).blob()], "ai-edited.png", {type: 'image/png'});
+            handleSelectMedia({ id: uuidv4(), name: 'AI Edited Image', url: URL.createObjectURL(newFile), type: 'image', file: newFile });
+
+        } catch(e) {
+            if (e instanceof Error) toastService.error(e.message);
+        }
+    };
+    
+    const handleBackgroundAction = async (action: 'remove' | 'change', prompt?: string) => {
+         if (aiMode === 'Device') { toastService.error("Cloud AI mode needed."); return; }
+        if (!media) { toastService.error("Please add an image first."); return; }
+
+        try {
+            const file = 'file' in media ? media.file : await (await fetch(media.src.original)).blob();
+            const base64Image = await fileToBase64(new File([file], "image"));
+            const mimeType = file.type || 'image/jpeg';
+            
+            const newBase64Image = prompt 
+                ? await editImageWithPrompt(base64Image, mimeType, `Change the background to: ${prompt}. Keep the foreground subject.`)
+                : await removeImageBackground(base64Image, mimeType);
+            
+            const newFile = new File([await(await fetch(`data:image/png;base64,${newBase64Image}`)).blob()], "bg-edited.png", {type: 'image/png'});
+            handleSelectMedia({ id: uuidv4(), name: 'Background Edited Image', url: URL.createObjectURL(newFile), type: 'image', file: newFile });
+        } catch(e) {
+            if (e instanceof Error) toastService.error(e.message);
+        }
+    };
+    
+    const handleAutoAdjust = async () => {
+         if (aiMode === 'Device') { toastService.error("Cloud AI mode needed."); return; }
+        if (!media) { toastService.error("Please add an image first."); return; }
+
+         try {
+            const file = 'file' in media ? media.file : await (await fetch(media.src.original)).blob();
+            const base64Image = await fileToBase64(new File([file], "image"));
+            const mimeType = file.type || 'image/jpeg';
+            const adjustments = await autoAdjustImage(base64Image, mimeType);
+            const newFilters = { ...filters, ...adjustments };
+            setFilters(newFilters);
+            addToHistory({ filters: newFilters });
+            toastService.success("Auto adjustments applied!");
+         } catch(e) {
+             if (e instanceof Error) toastService.error(e.message);
+         }
+    }
+    
+    const handleAddText = (text: { content: string; color: string }) => {
+        const newOverlay: Overlay = {
+            id: uuidv4(), type: 'text', content: text.content,
+            startTime: 0, duration: 999, x: 50, y: 50, width: 30, height: 10, rotation: 0,
+            fontSize: 48, color: text.color, fontFamily: 'Arial', fontWeight: 'bold', textAlign: 'center'
+        };
+        const newOverlays = [...overlays, newOverlay];
+        setOverlays(newOverlays);
+        addToHistory({ overlays: newOverlays });
+    };
+
+    const handleAddSticker = (stickerUrl: string) => {
+        const newOverlay: Overlay = {
+            id: uuidv4(), type: 'image', content: stickerUrl,
+            startTime: 0, duration: 999, x: 50, y: 50, width: 20, height: 20, rotation: 0
+        };
+        const newOverlays = [...overlays, newOverlay];
+        setOverlays(newOverlays);
+        addToHistory({ overlays: newOverlays });
+    };
+
+    const handleUpdateOverlay = (updatedOverlay: Overlay) => {
+        const newOverlays = overlays.map(o => o.id === updatedOverlay.id ? updatedOverlay : o);
+        setOverlays(newOverlays);
+        addToHistory({ overlays: newOverlays });
+    };
+
+    const handleDeleteOverlay = (id: string) => {
+        const newOverlays = overlays.filter(o => o.id !== id);
+        setOverlays(newOverlays);
+        addToHistory({ overlays: newOverlays });
+    };
+
+    const tools = [
+        { id: 'media', name: 'Media', icon: 'fa-photo-video' },
+        { id: 'templates', name: 'Templates', icon: 'fa-layer-group' },
+        { id: 'adjust', name: 'Adjust', icon: 'fa-sliders-h' },
+        { id: 'ai', name: 'AI Edit', icon: 'fa-wand-magic-sparkles' },
+        { id: 'crop', name: 'Crop', icon: 'fa-crop-alt' },
+        { id: 'text', name: 'Text', icon: 'fa-font' },
+        { id: 'stickers', name: 'Stickers', icon: 'fa-sticky-note' },
+    ];
+    
+    // FIX: Move state setters out of render logic and into a dedicated event handler
+    // to prevent "Invalid hook call" error (React #301).
+    const handleSelectTool = (toolId: string) => {
+        setActiveTool(toolId);
+        setIsCropping(toolId === 'crop');
+    };
+
+    const renderPanel = () => {
+        switch (activeTool) {
+            case 'media': return <MediaPanel onSelectMedia={handleSelectMedia} mediaType="photo" />;
+            case 'templates': return <TemplatesPanel onSelectTemplate={(f) => { setFilters(f); addToHistory({filters: f}); }} />;
+            case 'adjust': return <AdjustPanel filters={filters} onFilterChange={handleFilterChange} onAutoAdjust={handleAutoAdjust} />;
+            case 'ai': return <AIPanel onPrompt={handleAIAction} onBackgroundAction={handleBackgroundAction} />;
+            case 'crop': return <CropPanel aspectRatio={cropAspectRatio} onAspectRatioChange={setCropAspectRatio} onApply={() => setIsCropping(false)} onReset={() => {}} />;
+            case 'text': return <TextPanel onAddText={handleAddText} />;
+            case 'stickers': return <StickersPanel onSelectSticker={handleAddSticker} />;
+            default: return null;
+        }
+    };
+    
+    const filterStyle = {
+        filter: Object.entries(filters)
+            .map(([key, value]) => {
+                if(key === 'hue-rotate') return `${key}(${value}deg)`;
+                if(key === 'blur') return `${key}(${value}px)`;
+                return `${key}(${value})`;
+            }).join(' ')
+    };
 
     return (
-        <div className="h-full flex flex-col md:flex-row gap-2 md:gap-4 p-2 md:p-4 overflow-hidden">
-             {isLoading && <div className="fixed inset-0 bg-black/70 z-50 flex flex-col items-center justify-center"><Spinner /><p className="text-white mt-4">AI is thinking...</p></div>}
-            <canvas ref={finalCanvasRef} className="hidden" /> {/* For final export */}
-            
-            <div className="hidden md:flex flex-col w-80 bg-gray-800 rounded-lg p-3">
-                {/* Desktop: Right Panel */}
-                <MediaPanel onSelect={handleFileSelect}/>
-            </div>
-            
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex-grow bg-gray-800 rounded-lg flex flex-col overflow-hidden">
-                     {/* Top Bar */}
-                     <div className="flex-shrink-0 p-3 bg-gray-900/30 flex justify-between items-center">
-                        <h2 className="font-semibold text-white">AI Image Editor</h2>
-                        <div className="flex items-center gap-2">
-                             <button onClick={() => resetAllEdits(true)} title="Reset Changes" disabled={!originalImage} className="w-9 h-9 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 flex items-center justify-center"><i className="fas fa-undo"></i></button>
-                             <button onClick={handleSaveProject} title="Save Project" disabled={!originalImage} className="w-9 h-9 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"><i className="fas fa-save"></i></button>
-                             <button onClick={handleDownload} title="Download Image" disabled={!originalImage} className="w-9 h-9 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"><i className="fas fa-download"></i></button>
+        <DndProvider backend={HTML5Backend}>
+            <div className="h-full flex flex-col md:flex-row bg-gray-900">
+                {isExporting && <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center"><Spinner/></div>}
+                {exportedMedia && <ExportSuccessModal exportResult={exportedMedia} initialFileName={projectName} onClose={() => setExportedMedia(null)} />}
+                
+                <div className="w-full md:w-20 md:h-full flex-shrink-0 order-last md:order-first">
+                    <EditorToolbar tools={tools} activeTool={activeTool} onSelectTool={handleSelectTool} />
+                </div>
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <EditorTopBar 
+                        projectName={projectName}
+                        onProjectNameChange={setProjectName}
+                        onBack={() => {}}
+                        onSave={handleSaveProject}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                        onExport={handleExport}
+                        canUndo={historyIndex > 0}
+                        canRedo={historyIndex < history.length - 1}
+                    />
+                    <div className="flex-1 flex flex-col md:flex-row bg-gray-900 overflow-hidden">
+                        <div ref={canvasContainerRef} className="flex-1 flex items-center justify-center p-4 relative bg-black/50 overflow-hidden" onClick={() => setSelectedOverlayId(null)}>
+                            {!media ? <p className="text-gray-500">Select an image from the Media panel to begin</p> : (
+                                <div className="relative" style={{...filterStyle}}>
+                                    <img 
+                                        ref={imageRef} 
+                                        src={'src' in media ? media.src.large : media.url}
+                                        alt={'alt' in media ? media.alt : media.name || 'Selected media'}
+                                        className="max-w-full max-h-full object-contain"
+                                        style={{ maxHeight: 'calc(100vh - 150px)' }}
+                                    />
+                                    {isCropping && canvasContainerRef.current && imageRef.current && (
+                                        <CropOverlay 
+                                            rect={cropRect}
+                                            onRectChange={setCropRect}
+                                            canvasWidth={imageRef.current.clientWidth}
+                                            canvasHeight={imageRef.current.clientHeight}
+                                            aspectRatio={cropAspectRatio}
+                                        />
+                                    )}
+                                    {overlays.map(overlay => (
+                                        <TransformableOverlay
+                                            key={overlay.id}
+                                            overlay={overlay}
+                                            onUpdate={handleUpdateOverlay}
+                                            isSelected={selectedOverlayId === overlay.id}
+                                            onSelect={() => setSelectedOverlayId(overlay.id)}
+                                            onDelete={() => handleDeleteOverlay(overlay.id)}
+                                            canvasWidth={imageRef.current?.clientWidth || 0}
+                                            canvasHeight={imageRef.current?.clientHeight || 0}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="w-full md:w-80 bg-gray-800 flex-shrink-0 overflow-y-auto">
+                            {renderPanel()}
                         </div>
                     </div>
-                    
-                    {/* Canvas */}
-                    <div className="flex-grow bg-black/50 flex items-center justify-center relative overflow-hidden p-4">
-                        <canvas ref={canvasRef} className="hidden" />
-                        {!originalImage ? ( <div className="text-center text-gray-500"> <i className="fas fa-image text-4xl mb-2"></i> <p>Select an image to start editing</p> </div> ) : ( <img src={editedImageUrl || ''} alt="Edited" className="max-h-full max-w-full object-contain shadow-2xl" /> )}
-                    </div>
-                </div>
-
-                 {/* Mobile Tools */}
-                <div className="md:hidden flex flex-col flex-shrink-0 mt-2">
-                    <div className="bg-gray-800 rounded-t-lg">
-                        {activeTool === 'media' && <div className="h-64 p-2 overflow-y-auto"><MediaPanel onSelect={handleFileSelect} /></div>}
-                        {originalImage && (
-                          <>
-                            {activeTool === 'ai' && <div className="p-4 grid grid-cols-3 gap-2 text-center text-white">
-                                <button onClick={() => handleAITool('background')} className="p-2 bg-gray-700 rounded-lg hover:bg-purple-600"><i className="fas fa-user-ninja text-2xl mb-1"></i><span className="text-xs">BG Remover</span></button>
-                                <button onClick={() => handleAITool('focus')} className="p-2 bg-gray-700 rounded-lg hover:bg-purple-600"><i className="fas fa-bullseye text-2xl mb-1"></i><span className="text-xs">Dynamic Focus</span></button>
-                                <button onClick={applyVintageFilter} className="p-2 bg-gray-700 rounded-lg hover:bg-purple-600"><i className="fas fa-camera-retro text-2xl mb-1"></i><span className="text-xs">Vintage</span></button>
-                            </div>}
-                            {activeTool === 'adjust' && <div className="p-4"><input type="range" className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-thumb-purple disabled:opacity-50"/></div>}
-                            {activeTool === 'crop' && (<div className="p-4 flex items-center justify-around gap-2">{CROP_RATIOS.map(r => <button key={r.name} onClick={() => applyCropAndResize('crop', r.value)} className="px-3 py-1 text-sm bg-gray-700 rounded">{r.name}</button>)}</div>)}
-                            {activeTool === 'resize' && (<div className="p-4 flex items-center gap-2 text-sm"><input type="number" value={resize.width} onChange={e => setResize(r => ({...r, width: +e.target.value}))} className="w-1/2 bg-gray-700 rounded p-2"/> <span>x</span> <input type="number" value={resize.height} onChange={e => setResize(r => ({...r, height: +e.target.value}))} className="w-1/2 bg-gray-700 rounded p-2"/> <button onClick={() => applyCropAndResize('resize', resize)} className="p-2 bg-purple-600 rounded"><i className="fas fa-check"></i></button></div>)}
-                            {activeTool === 'stickers' && <StickersPanel onSelectEmoji={handleAddEmoji} onUpload={handleCustomStickerUpload} />}
-                            {activeTool === 'text' && <TextPanel onAddText={handleAddText} selectedText={selectedText} onUpdateText={handleUpdateText} />}
-                          </>
-                        )}
-                    </div>
-
-                    <div className="grid grid-cols-7 gap-1 p-2 bg-gray-900 rounded-b-lg">
-                       <ModeButton icon="fa-photo-video" label="Media" isActive={activeTool === 'media'} onClick={() => setActiveTool('media')} />
-                       <ModeButton icon="fa-robot" label="AI Tools" isActive={activeTool === 'ai'} onClick={() => originalImage && setActiveTool('ai')} disabled={!originalImage} />
-                       <ModeButton icon="fa-sliders-h" label="Adjust" isActive={activeTool === 'adjust'} onClick={() => originalImage && setActiveTool('adjust')} disabled={!originalImage} />
-                       <ModeButton icon="fa-crop-alt" label="Crop" isActive={activeTool === 'crop'} onClick={() => originalImage && setActiveTool('crop')} disabled={!originalImage} />
-                       <ModeButton icon="fa-expand-arrows-alt" label="Resize" isActive={activeTool === 'resize'} onClick={() => originalImage && setActiveTool('resize')} disabled={!originalImage} />
-                       <ModeButton icon="fa-smile-beam" label="Stickers" isActive={activeTool === 'stickers'} onClick={() => originalImage && setActiveTool('stickers')} disabled={!originalImage} />
-                       <ModeButton icon="fa-font" label="Text" isActive={activeTool === 'text'} onClick={() => originalImage && setActiveTool('text')} disabled={!originalImage} />
-                    </div>
                 </div>
             </div>
-        </div>
+        </DndProvider>
     );
 };
-const ModeButton: React.FC<{ icon: string; label: string; isActive: boolean; onClick: () => void; disabled?: boolean; }> = ({ icon, label, isActive, onClick, disabled }) => (
-    <button onClick={onClick} disabled={disabled} className={`py-2 flex flex-col items-center justify-center gap-1 text-xs rounded-lg transition-colors w-full ${isActive ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}>
-        <i className={`fas ${icon} text-lg`}></i>
-        <span>{label}</span>
-    </button>
-);
+
 export default AIImageEditor;

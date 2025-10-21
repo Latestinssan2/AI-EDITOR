@@ -1,141 +1,115 @@
 import React, { useRef } from 'react';
+import { useDrag, useDrop } from 'react-dnd';
 import { TimelineClip } from '../../../types';
 
 interface TimelineClipItemProps {
     clip: TimelineClip;
-    onUpdate: (updatedClip: TimelineClip) => void;
-    onReplace: (clipId: string) => void;
+    index: number;
     zoomLevel: number;
-    isAudio: boolean;
     isSelected: boolean;
-    onClick: (e: React.MouseEvent) => void;
+    onSelect: () => void;
+    onUpdate: (updatedClip: TimelineClip) => void;
+    onUpdateEnd: () => void;
+    onMove: (dragIndex: number, hoverIndex: number) => void;
 }
 
 const BASE_PIXELS_PER_SECOND = 20;
 
-const TimelineClipItem: React.FC<TimelineClipItemProps> = ({ clip, onUpdate, onReplace, zoomLevel, isAudio, isSelected, onClick }) => {
-    const clipRef = useRef<HTMLDivElement>(null);
+const TimelineClipItem: React.FC<TimelineClipItemProps> = ({ clip, index, zoomLevel, isSelected, onSelect, onUpdate, onUpdateEnd, onMove }) => {
+    const ref = useRef<HTMLDivElement>(null);
+
+    const [, drop] = useDrop({
+        accept: 'clip',
+        hover(item: { index: number }) {
+            if (!ref.current) return;
+            if (item.index !== index) {
+                onMove(item.index, index);
+                item.index = index;
+            }
+        },
+    });
+
+    const [{ isDragging }, drag] = useDrag({
+        type: 'clip',
+        item: { index },
+        collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+        end: onUpdateEnd,
+    });
+
+    drag(drop(ref));
     
-    if (clip.isPlaceholder) {
-        const placeholderWidth = clip.duration * BASE_PIXELS_PER_SECOND * zoomLevel;
-        return (
-            <div
-                style={{ width: `${placeholderWidth}px` }}
-                onClick={() => onReplace(clip.id)}
-                className={`relative bg-gray-700 border-2 border-dashed border-gray-500 rounded-md flex-shrink-0 h-16 flex flex-col items-center justify-center p-2 cursor-pointer hover:border-purple-400 hover:bg-gray-600 transition-colors ${isSelected ? 'ring-2 ring-yellow-400' : ''}`}
-            >
-                <i className="fas fa-photo-video text-gray-400 mb-1"></i>
-                <p className="text-white text-xs text-center select-none">{(clip.source as any).placeholderText}</p>
-            </div>
-        )
-    }
-
-    const source = clip.source as any; // Cast because we know it's not a placeholder here
-    const clipWidth = clip.duration * BASE_PIXELS_PER_SECOND * zoomLevel;
-
-    const handleDragStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, handle: 'left' | 'right') => {
+    const handleDragStart = (e: React.MouseEvent<HTMLDivElement>, handle: 'left' | 'right') => {
         e.preventDefault();
         e.stopPropagation();
 
-        const startX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const initialStartOffset = clip.startOffset;
+        const startX = e.clientX;
         const initialDuration = clip.duration;
+        const initialStartOffset = clip.startOffset;
 
-        const handleDragMove = (moveEvent: MouseEvent | TouchEvent) => {
-            const currentX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
-            const deltaX = currentX - startX;
+        const handleDragMove = (moveEvent: MouseEvent) => {
+            const deltaX = moveEvent.clientX - startX;
             const deltaSeconds = deltaX / (BASE_PIXELS_PER_SECOND * zoomLevel);
-
+            
             let newClip = { ...clip };
 
             if (handle === 'right') {
-                let newDuration = initialDuration + deltaSeconds;
-                const maxDuration = clip.originalDuration - clip.startOffset;
-                newDuration = Math.max(0.5, Math.min(newDuration, maxDuration));
-                newClip.duration = newDuration;
-            } else { // handle === 'left'
-                let newStartOffset = initialStartOffset + deltaSeconds;
-                let newDuration = initialDuration - deltaSeconds;
-
-                if (newStartOffset < 0) {
-                    newDuration += newStartOffset;
-                    newStartOffset = 0;
+                const newDuration = initialDuration + deltaSeconds;
+                newClip.duration = Math.min(Math.max(0.2, newDuration), clip.originalDuration - clip.startOffset);
+            } else { // 'left'
+                const newStartOffset = initialStartOffset + deltaSeconds;
+                const newDuration = initialDuration - deltaSeconds;
+                
+                if (newStartOffset >= 0 && newDuration >= 0.2 && newStartOffset + newDuration <= clip.originalDuration) {
+                    newClip.startOffset = newStartOffset;
+                    newClip.duration = newDuration;
                 }
-                if (newDuration < 0.5) {
-                    newStartOffset -= (0.5 - newDuration);
-                    newDuration = 0.5;
-                }
-                if (newStartOffset < 0) newStartOffset = 0;
-
-                newClip.startOffset = newStartOffset;
-                newClip.duration = newDuration;
             }
-            
             onUpdate(newClip);
         };
 
         const handleDragEnd = () => {
-            window.removeEventListener('mousemove', handleDragMove as any);
-            window.removeEventListener('mouseup', handleDragEnd as any);
-            window.removeEventListener('touchmove', handleDragMove as any);
-            window.removeEventListener('touchend', handleDragEnd as any);
+            document.removeEventListener('mousemove', handleDragMove);
+            document.removeEventListener('mouseup', handleDragEnd);
+            onUpdateEnd();
         };
 
-        window.addEventListener('mousemove', handleDragMove as any);
-        window.addEventListener('mouseup', handleDragEnd as any);
-        window.addEventListener('touchmove', handleDragMove as any);
-        window.addEventListener('touchend', handleDragEnd as any);
+        document.addEventListener('mousemove', handleDragMove);
+        document.addEventListener('mouseup', handleDragEnd);
     };
 
-    const displayName = 'name' in source ? source.name : source.user?.name || 'Stock Media';
-    const sourceUrl = 'url' in source ? source.url : '';
-    const posterUrl = 'image' in source ? source.image : '';
-    const isVideo = !isAudio && ('type' in source ? source.type === 'video' : true);
+    const itemWidth = clip.duration * BASE_PIXELS_PER_SECOND * zoomLevel;
+    const isPlaceholder = clip.isPlaceholder;
 
-    const bgColor = isAudio ? 'bg-green-500' : 'bg-purple-500';
-    const height = isAudio ? 'h-10 md:h-12' : 'h-12 md:h-16';
-    const selectionRing = isSelected ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-gray-800' : '';
+    // Define styles based on whether it's a placeholder
+    const baseBg = isPlaceholder ? 'bg-gray-700/80' : 'bg-purple-800/80';
+    const placeholderStyle = isPlaceholder ? 'border-2 border-dashed border-gray-500 hover:border-purple-400' : '';
+    const selectionRing = isSelected ? 'ring-2 ring-yellow-400 z-10' : 'ring-1 ring-gray-600';
 
-    const handleClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onClick(e);
-    }
 
     return (
         <div
-            ref={clipRef}
-            style={{ width: `${clipWidth}px` }}
-            onClick={handleClick}
-            className={`clip-item relative ${bgColor} rounded-md flex-shrink-0 group overflow-hidden ${height} flex items-center p-2 cursor-pointer transition-all duration-150 ${selectionRing}`}
+            ref={ref}
+            style={{ width: `${itemWidth}px` }}
+            onClick={(e) => { e.stopPropagation(); onSelect(); }}
+            className={`relative h-12 ${baseBg} rounded-md group overflow-hidden flex items-center justify-center p-1 cursor-pointer transition-all duration-150 ${selectionRing} ${isDragging ? 'opacity-50' : ''} ${placeholderStyle}`}
         >
-            {/* Resizing Handles (Mobile Optimized) */}
-            <div
-                onMouseDown={(e) => handleDragStart(e, 'left')}
-                onTouchStart={(e) => handleDragStart(e, 'left')}
-                className={`absolute left-0 top-0 bottom-0 w-4 cursor-ew-resize z-10 transition-opacity flex items-center justify-center ${isSelected ? 'opacity-100' : 'opacity-0'}`}
-            >
-                <div className="w-1 h-1/2 bg-yellow-400 rounded-full"></div>
-            </div>
-            <div
-                onMouseDown={(e) => handleDragStart(e, 'right')}
-                onTouchStart={(e) => handleDragStart(e, 'right')}
-                className={`absolute right-0 top-0 bottom-0 w-4 cursor-ew-resize z-10 transition-opacity flex items-center justify-center ${isSelected ? 'opacity-100' : 'opacity-0'}`}
-            >
-                <div className="w-1 h-1/2 bg-yellow-400 rounded-full"></div>
-            </div>
-            
-            {/* Clip Content */}
-            {!isAudio && isVideo && (
-                 <video src={sourceUrl} className="w-full h-full object-cover absolute inset-0 pointer-events-none" />
-            )}
-             {!isAudio && !isVideo && ( // This covers PexelsVideo and Image MediaFile
-                <img src={posterUrl || sourceUrl} className="w-full h-full object-cover absolute inset-0 pointer-events-none" />
+            {isPlaceholder && <i className="fas fa-plus absolute text-gray-400 text-lg group-hover:text-purple-400 transition-colors"></i>}
+
+            {/* Trim Handles - should not be available for placeholders */}
+            {!isPlaceholder && (
+                <>
+                    <div
+                        onMouseDown={(e) => handleDragStart(e, 'left')}
+                        className="absolute left-0 top-0 bottom-0 w-3 bg-yellow-500/50 opacity-0 group-hover:opacity-100 cursor-ew-resize z-20"
+                    ></div>
+                    <div
+                        onMouseDown={(e) => handleDragStart(e, 'right')}
+                        className="absolute right-0 top-0 bottom-0 w-3 bg-yellow-500/50 opacity-0 group-hover:opacity-100 cursor-ew-resize z-20"
+                    ></div>
+                </>
             )}
             
-            <div className="relative z-0 flex items-center w-full">
-                {isAudio && <i className="fas fa-music text-white mr-2 flex-shrink-0"></i>}
-                <p className="text-white text-xs truncate select-none">{displayName}</p>
-            </div>
+            <p className="text-white text-xs text-center truncate select-none pointer-events-none z-10 px-2">{clip.placeholderText || clip.source?.name}</p>
         </div>
     );
 };

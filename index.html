@@ -1,162 +1,188 @@
 <!DOCTYPE html>
-<html lang="en" class="theme-genesis">
-  <head>
+<html lang="en">
+<head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1a1b26" />
     <title>Gemini Genesis Editor V8</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1a1b26" />
+    <!-- Apple PWA specific tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="/logo192.png">
+    
+    <!-- Tailwind CSS (via CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@400;700&family=Rajdhani:wght@400;700&family=Audiowide&family=Jura:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <style>
+    <style type="text/tailwindcss">
       body {
-        font-family: 'Inter', sans-serif;
-        background-color: var(--color-bg);
-        color: var(--color-text-primary);
+        overscroll-behavior: none;
       }
-      :root, .theme-dark {
-        --color-bg: #111111;
-        --color-bg-secondary: #1e1e1e;
-        --color-bg-tertiary: #2a2a2a;
-        --color-border: #3a3a3a;
-        --color-text-primary: #f0f0f0;
-        --color-text-secondary: #a0a0a0;
-        --color-primary-hue: 270; /* default to genesis purple */
-        --color-primary: hsl(var(--color-primary-hue), 80%, 60%);
-        --color-primary-hover: hsl(var(--color-primary-hue), 80%, 70%);
-        --color-primary-focus: hsl(var(--color-primary-hue), 80%, 50%);
-        --color-success: #22c55e;
-        --color-error: #ef4444;
-        --color-info: #3b82f6;
+      .range-thumb-purple::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 16px; height: 16px;
+        background: #a855f7; /* purple-500 */
+        cursor: pointer; border-radius: 9999px;
       }
-      .theme-light {
-        --color-bg: #f9fafb;
-        --color-bg-secondary: #ffffff;
-        --color-bg-tertiary: #f3f4f6;
-        --color-border: #e5e7eb;
-        --color-text-primary: #111827;
-        --color-text-secondary: #6b7280;
+      .range-thumb-purple::-moz-range-thumb {
+        width: 16px; height: 16px;
+        background: #a855f7;
+        cursor: pointer; border-radius: 9999px;
       }
-      .theme-genesis { --color-primary-hue: 270; }
-      .theme-aurora { --color-primary-hue: 145; }
-      .theme-capcut { --color-primary-hue: 210; }
-
       .gradient-bg {
-        background: black;
-        position: relative;
-        overflow: hidden;
+        background: linear-gradient(-45deg, #1a1b26, #2c213d, #1a1b26, #3c2a54);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
       }
-      .gradient-bg::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background-image:
-            radial-gradient(circle at 10% 20%, hsla(270, 80%, 60%, 0.4) 0%, transparent 40%),
-            radial-gradient(circle at 80% 10%, hsla(330, 80%, 60%, 0.3) 0%, transparent 40%),
-            radial-gradient(circle at 50% 80%, hsla(210, 80%, 60%, 0.4) 0%, transparent 40%);
-        background-size: 250% 250%;
-        animation: glow-move 40s linear infinite;
-        filter: blur(80px);
-        z-index: 1;
-      }
-      
-      @keyframes glow-move {
+      @keyframes gradient {
         0% { background-position: 0% 50%; }
         50% { background-position: 100% 50%; }
         100% { background-position: 0% 50%; }
       }
+      @keyframes fade-in-right {
+        from { opacity: 0; transform: translateX(20px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      .animate-fade-in-right { animation: fade-in-right 0.3s ease-out forwards; }
 
-      /* Slideshow Transitions */
-      .slideshow-img {
+      /* Slideshow animations */
+      .slideshow-container { overflow: hidden; position: relative; }
+      .slideshow-img { width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; }
+      .slideshow-img.active { opacity: 1; z-index: 10; transform: scale(1); }
+      .slideshow-img.previous { opacity: 1; z-index: 9; }
+      
+      /* --- Standard Transitions --- */
+      .transition-fade .slideshow-img.previous { opacity: 0; }
+      .transition-slide .slideshow-img.active { animation: slide-in 0.7s forwards; }
+      .transition-slide .slideshow-img.previous { animation: slide-out 0.7s forwards; }
+      @keyframes slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+      @keyframes slide-out { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+      .transition-wipe .slideshow-img.active::before { content: ''; position: absolute; inset: 0; background: inherit; animation: wipe-in 1s forwards; }
+      @keyframes wipe-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+      .transition-glitch .slideshow-img.active { animation: glitch-anim 0.5s forwards; }
+       @keyframes glitch-anim {
+        0% { transform: translate(0); opacity: 1; } 20% { transform: translate(-3px, 3px); } 40% { transform: translate(-3px, -3px); }
+        60% { transform: translate(3px, 3px); } 80% { transform: translate(3px, -3px); } 100% { transform: translate(0); }
+      }
+
+      /* --- New Futuristic Transitions --- */
+      .slideshow-img.active { transition-property: opacity, transform, clip-path; }
+      .slideshow-img.previous { transition-property: opacity, transform, clip-path; }
+
+      /* Zoom Blur */
+      .transition-zoom-blur .slideshow-img.active { animation: zoom-blur-in 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+      .transition-zoom-blur .slideshow-img.previous { animation: zoom-blur-out 0.8s cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+      @keyframes zoom-blur-in { from { transform: scale(1.5); filter: blur(10px); opacity: 0; } to { transform: scale(1); filter: blur(0); opacity: 1; } }
+      @keyframes zoom-blur-out { from { transform: scale(1); filter: blur(0); opacity: 1; } to { transform: scale(0.5); filter: blur(10px); opacity: 0; } }
+
+      /* Glitch Warp */
+      .transition-glitch-warp .slideshow-img.previous { animation: glitch-warp-out 0.6s forwards; }
+      .transition-glitch-warp .slideshow-img.active { animation: glitch-warp-in 0.6s forwards; }
+      @keyframes glitch-warp-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes glitch-warp-out {
+          0% { clip-path: inset(0 0 0 0); transform: translateX(0); }
+          20% { clip-path: inset(20% 0 50% 0); transform: translateX(-10px); }
+          40% { clip-path: inset(50% 0 10% 0); transform: translateX(10px); }
+          60% { clip-path: inset(10% 0 80% 0); transform: translateX(-5px); }
+          80% { clip-path: inset(80% 0 5% 0); transform: translateX(5px); }
+          100% { clip-path: inset(50% 0 50% 0); transform: translateX(0); opacity: 0; }
+      }
+
+      /* Vertical Shutter */
+      .transition-shutter-v .slideshow-img.active { clip-path: inset(100% 0 0 0); animation: shutter-v-in 1s ease-in-out forwards; }
+      .transition-shutter-v .slideshow-img.previous { animation: shutter-v-out 1s ease-in-out forwards; }
+      @keyframes shutter-v-in { to { clip-path: inset(0 0 0 0); } }
+      @keyframes shutter-v-out { to { clip-path: inset(0 0 100% 0); } }
+
+      /* Circle Wipe */
+      .transition-circle-wipe .slideshow-img.active { clip-path: circle(0% at 50% 50%); animation: circle-wipe-in 1s ease-in-out forwards; }
+      @keyframes circle-wipe-in { to { clip-path: circle(75% at 50% 50%); } }
+      
+      /* Diagonal Wipe */
+      .transition-diag-wipe .slideshow-img.active { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); animation: diag-wipe-in 1s ease-in-out forwards; }
+      @keyframes diag-wipe-in { to { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); } }
+
+      /* Box In */
+      .transition-box-in .slideshow-img.active { clip-path: inset(50% 50% 50% 50%); animation: box-in 1s ease-out forwards; }
+      @keyframes box-in { to { clip-path: inset(0 0 0 0); } }
+
+      /* RGB Split */
+      .transition-rgb-split .slideshow-img.previous { animation: rgb-split-out 0.6s forwards; }
+      .transition-rgb-split .slideshow-img.previous::before, .transition-rgb-split .slideshow-img.previous::after { content: ''; position: absolute; inset: 0; background: inherit; mix-blend-mode: lighten; }
+      .transition-rgb-split .slideshow-img.previous::before { animation: rgb-split-anim 0.6s forwards; filter: hue-rotate(120deg); }
+      .transition-rgb-split .slideshow-img.previous::after { animation: rgb-split-anim 0.6s forwards; filter: hue-rotate(240deg); animation-direction: reverse; }
+      @keyframes rgb-split-anim { from { transform: translate(0, 0); } to { transform: translate(10px, -5px); } }
+      @keyframes rgb-split-out { from { opacity: 1; } to { opacity: 0; } }
+
+      /* Scanline Wipe */
+      .transition-scan-wipe .slideshow-img.active::before { content: ''; position: absolute; inset: 0; background: inherit; -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, transparent 10%); mask-image: linear-gradient(to bottom, transparent 0%, black 5%, transparent 10%); -webkit-mask-size: 100% 2000%; mask-size: 100% 2000%; animation: scan-wipe-in 1.2s linear forwards; }
+      @keyframes scan-wipe-in { from { -webkit-mask-position: 0 100%; mask-position: 0 100%; } to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
+
+
+      /* Timeline clip triangular handles */
+      .timeline-clip-handle {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 0;
+          height: 0;
+          border-style: solid;
+          cursor: ew-resize;
+          z-index: 20;
+          opacity: 0.6;
+      }
+      .group:hover .timeline-clip-handle { opacity: 1; }
+      .timeline-clip-handle-left {
+          left: -1px;
+          border-width: 24px 12px 24px 0;
+          border-color: transparent #a855f7 transparent transparent;
+      }
+      .timeline-clip-handle-right {
+          right: -1px;
+          border-width: 24px 0 24px 12px;
+          border-color: transparent transparent transparent #a855f7;
+      }
+      /* Safe Zone for 9:16 editor */
+      .safe-zone-overlay {
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        opacity: 0;
-        transition: opacity 1s ease-in-out;
-      }
-      .slideshow-img.active {
-        opacity: 1;
-        z-index: 1;
-      }
-      .slideshow-img.previous {
-        z-index: 0;
-      }
-
-      /* Fade */
-      .transition-fade .slideshow-img.active { animation: fadeIn 1s forwards; }
-      .transition-fade .slideshow-img.previous { animation: fadeOut 1s forwards; }
-
-      /* Slide */
-      .transition-slide .slideshow-img.active { animation: slideInFromRight 1s forwards; }
-      .transition-slide .slideshow-img.previous { animation: slideOutToLeft 1s forwards; }
-      
-      /* Zoom In */
-      .transition-zoom-in .slideshow-img.active { animation: zoomIn 1s forwards; }
-      .transition-zoom-in .slideshow-img.previous { animation: fadeOut 1s forwards; }
-      
-      /* Zoom Out */
-      .transition-zoom-out .slideshow-img.active { animation: zoomOut 1s forwards; }
-      .transition-zoom-out .slideshow-img.previous { animation: fadeOut 1s forwards; }
-
-      /* Ken Burns */
-      .transition-ken-burns .slideshow-img.active { animation: fadeIn 1s forwards, kenBurns 5s forwards; }
-      .transition-ken-burns .slideshow-img.previous { animation: fadeOut 1s forwards; }
-
-      /* Wipe */
-      .transition-wipe .slideshow-img.active { animation: wipeIn 1s forwards; }
-      .transition-wipe .slideshow-img.previous { opacity: 1; animation: fadeOut 1.1s forwards; }
-
-      /* Glitch */
-      .transition-glitch .slideshow-img.active { animation: fadeIn 0.1s forwards, glitchAnim 0.8s forwards steps(2, end); }
-      .transition-glitch .slideshow-img.previous { animation: fadeOut 1s forwards; }
-
-
-      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-      @keyframes slideInFromRight { from { transform: translateX(100%); opacity: 1; } to { transform: translateX(0); opacity: 1; } }
-      @keyframes slideOutToLeft { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-100%); opacity: 1; } }
-      @keyframes zoomIn { from { transform: scale(1.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-      @keyframes zoomOut { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-      @keyframes kenBurns {
-        0% { transform: scale(1) translate(0, 0); }
-        50% { transform: scale(1.2) translate(-2%, 2%); }
-        100% { transform: scale(1) translate(0, 0); }
-      }
-      @keyframes wipeIn { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-      
-      @keyframes glitchAnim {
-        0% { transform: translate(0); opacity: 1; }
-        25% { transform: translate(5px, -5px); }
-        50% { transform: translate(-5px, 5px); }
-        75% { transform: translate(5px, 5px); }
-        100% { transform: translate(0); }
+        inset: 0;
+        border: 2px dashed rgba(255, 255, 255, 0.4);
+        box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+        pointer-events: none;
+        /* Common safe margins for social media UIs */
+        margin-top: 8%; margin-bottom: 15%; margin-left: 5%; margin-right: 5%;
       }
     </style>
-  <script type="importmap">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;700&family=Rajdhani:wght@400;700&family=Audiowide&family=Jura:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-900">
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+
+    <script type="importmap">
 {
   "imports": {
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
+    "react/jsx-runtime": "https://aistudiocdn.com/react@^19.2.0/jsx-runtime",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0",
     "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
     "react-dnd": "https://aistudiocdn.com/react-dnd@^16.0.1",
-    "react-dnd-html5-backend": "https://aistudiocdn.com/react-dnd-html5-backend@^16.0.1"
+    "react-dnd-html5-backend": "https://aistudiocdn.com/react-dnd-html5-backend@^16.0.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
-</head>
-  <body>
-    <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -170,5 +196,5 @@
         });
       }
     </script>
-  </body>
+</body>
 </html>

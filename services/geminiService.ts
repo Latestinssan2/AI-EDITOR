@@ -1,16 +1,13 @@
+
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { errorHandler } from './errorHandler';
 import { VideoProjectState } from "../types";
 
 const getAiClient = () => {
-    const apiKey = localStorage.getItem('genesis_v8_api_key');
-    
-    if (!apiKey || apiKey === 'on-device-placeholder') {
-        throw new Error("API key is not configured. Please set your API key to use Cloud AI features.");
-    }
-    
-    // The client is re-initialized for each call to ensure the latest key is used.
-    return new GoogleGenAI({ apiKey });
+    // FIX: Per guidelines, the API key is taken directly from the environment.
+    // The surrounding app logic (like SelectKeyOverlay) ensures this is called only
+    // when a key has been selected by the user, and `process.env.API_KEY` is populated.
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const editImageWithPrompt = async (
@@ -177,6 +174,38 @@ export const generateVideoTemplate = async (prompt: string): Promise<VideoProjec
 
     } catch (error) {
         const friendlyMessage = errorHandler.handle(error, 'GeminiVideoTemplate');
+        throw new Error(friendlyMessage);
+    }
+};
+
+export const autoAdjustImage = async (base64Image: string, mimeType: string): Promise<Record<string, number>> => {
+    try {
+        const ai = getAiClient();
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: {
+                parts: [
+                    { inlineData: { data: base64Image, mimeType } },
+                    { text: "Analyze this image and suggest optimal adjustments. Act as a professional photo editor." }
+                ]
+            },
+            config: {
+                systemInstruction: "You are a photo editing assistant. Your output must be a JSON object with keys 'brightness', 'contrast', and 'saturation'. Values should be numbers between 0.5 and 2, representing multipliers. For example: {\"brightness\": 1.1, \"contrast\": 1.05, \"saturation\": 1.2}",
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        brightness: { type: Type.NUMBER },
+                        contrast: { type: Type.NUMBER },
+                        saturation: { type: Type.NUMBER },
+                    }
+                },
+            },
+        });
+        const jsonString = response.text;
+        return JSON.parse(jsonString) as Record<string, number>;
+    } catch (error) {
+        const friendlyMessage = errorHandler.handle(error, 'GeminiAutoAdjust');
         throw new Error(friendlyMessage);
     }
 };
