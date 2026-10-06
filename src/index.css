@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  overscroll-behavior: none;
+}
+
+.range-thumb-purple::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  cursor: pointer;
+  border-radius: 9999px;
+}
+
+.range-thumb-purple::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #a855f7;
+  cursor: pointer;
+  border-radius: 9999px;
+}
+
+.gradient-bg {
+  background: linear-gradient(-45deg, #1a1b26, #2c213d, #1a1b26, #3c2a54);
+  background-size: 400% 400%;
+  animation: gradient 15s ease infinite;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes fade-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in-right { animation: fade-in-right 0.3s ease-out forwards; }
+
+.slideshow-container { overflow: hidden; position: relative; }
+.slideshow-img { width: 100%; height: 100%; object-fit: contain; position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; }
+.slideshow-img.active { opacity: 1; z-index: 10; transform: scale(1); }
+.slideshow-img.previous { opacity: 1; z-index: 9; }
+
+.timeline-clip-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-style: solid;
+  cursor: ew-resize;
+  z-index: 20;
+  opacity: 0.6;
+}
+.group:hover .timeline-clip-handle { opacity: 1; }
+.timeline-clip-handle-left {
+  left: -1px;
+  border-width: 24px 12px 24px 0;
+  border-color: transparent #a855f7 transparent transparent;
+}
+.timeline-clip-handle-right {
+  right: -1px;
+  border-width: 24px 0 24px 12px;
+  border-color: transparent transparent transparent #a855f7;
+}
+.safe-zone-overlay {
+  position: absolute;
+  inset: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+  pointer-events: none;
+  margin-top: 8%;
+  margin-bottom: 15%;
+  margin-left: 5%;
+  margin-right: 5%;
+}
